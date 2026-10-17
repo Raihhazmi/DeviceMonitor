@@ -1,0 +1,250 @@
+@model DataViewModel
+@using DeviceMonitor.Web.Controllers
+@using DeviceMonitor.Web.Services
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Antiforgery
+@{
+    ViewData["Title"] = "Data & Ingest";
+    var token = Antiforgery.GetAndStoreTokens(Context).RequestToken;
+    var baseUrl = $"{Context.Request.Scheme}://{Context.Request.Host}";
+    var jsonSample = ApiSamples.JsonPayload;
+    var endpoints = ApiSamples.EndpointList;
+    var psSample = ApiSamples.WithBase(ApiSamples.PowerShellCollector, baseUrl);
+    var taskSample = ApiSamples.TaskScheduler;
+}
+
+<div class="section-head" style="margin-top:0">
+    <div>
+        <h2>Status Database</h2>
+        <p>Semua panel dashboard membaca dari tabel-tabel berikut.</p>
+    </div>
+    <div class="right">
+        @if (Model.ApiKeyConfigured)
+        {
+            <span class="badge good"><i></i>API key terkonfigurasi</span>
+        }
+        else
+        {
+            <span class="badge bad"><i></i>Monitor:AgentApiKey belum diganti</span>
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.Message))
+{
+    <partial name="_Notice" model="Model.Message" view-data="@V.Notice(ViewData, Model.MessageType ?? "info")" />
+}
+
+<div class="grid g-4">
+    <div class="card">
+        <div class="card-head"><div><h3>Provider</h3><div class="sub">@Model.Provider · DB @Model.Database</div></div></div>
+        <div class="stat-row"><div class="name">Devices</div><div class="val">@V.N0(Model.Devices)</div></div>
+        <div class="stat-row"><div class="name">Disk drives</div><div class="val">@V.N0(Model.Disks)</div></div>
+        <div class="stat-row"><div class="name">Software</div><div class="val">@V.N0(Model.Software)</div></div>
+    </div>
+    <div class="card">
+        <div class="card-head"><div><h3>Telemetry</h3><div class="sub">Data time-series</div></div></div>
+        <div class="stat-row"><div class="name">Snapshots</div><div class="val">@V.N0(Model.Snapshots)</div></div>
+        <div class="stat-row"><div class="name">Agent runs</div><div class="val">@V.N0(Model.AgentRuns)</div></div>
+        <div class="stat-row"><div class="name">Compliance rules</div><div class="val">@V.N0(Model.Rules)</div></div>
+    </div>
+    <div class="card">
+        <div class="card-head"><div><h3>Laporan Terakhir</h3><div class="sub">Data paling baru yang masuk</div></div></div>
+        <div style="font-size:22px;font-weight:720;letter-spacing:-.6px">@V.Ago(Model.LastIngestUtc)</div>
+        <div class="small muted" style="color:var(--text-dim);margin-top:4px">@V.When(Model.LastIngestUtc)</div>
+    </div>
+    <div class="card">
+        <div class="card-head"><div><h3>Aksi Cepat</h3><div class="sub">Untuk demo &amp; pemulihan</div></div></div>
+        <form method="post" asp-action="SeedDemo" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+            @Html.AntiForgeryToken()
+            <input class="input" type="number" name="deviceCount" value="48" min="5" max="300" style="width:86px" title="Jumlah perangkat" />
+            <input class="input" type="number" name="historyDays" value="14" min="3" max="60" style="width:86px" title="Hari riwayat" />
+            <button class="btn btn-primary" type="submit"><svg><use href="#i-database"></use></svg> Generate data demo</button>
+        </form>
+        <form method="post" asp-action="Reevaluate" style="display:flex;gap:8px;margin-bottom:8px">
+            @Html.AntiForgeryToken()
+            <button class="btn" type="submit"><svg><use href="#i-shield"></use></svg> Hitung ulang compliance</button>
+        </form>
+        <form method="post" asp-action="Reset" data-confirm="Hapus SEMUA data perangkat, disk, software, snapshot, dan log agent?">
+            @Html.AntiForgeryToken()
+            <button class="btn btn-danger" type="submit"><svg><use href="#i-trash"></use></svg> Kosongkan database</button>
+        </form>
+    </div>
+</div>
+
+<div class="section-head">
+    <div>
+        <h2>Import CSV</h2>
+        <p>Header dikenali otomatis (case-insensitive, spasi/underscore diabaikan). Unduh template untuk melihat kolom yang didukung.</p>
+    </div>
+</div>
+
+<div class="grid g-2">
+    @foreach (var t in new[] {
+        ("devices", "Master perangkat", "hostname, devicetype, manufacturer, model, osname, osbuild, biosversion, ramtotalgb, department, location, assigneduser, status, lastseenutc …"),
+        ("disks", "Partisi / disk", "hostname, driveletter, label, mediatype, filesystem, sizegb, freegb, usedgb, healthstatus, collectedatutc"),
+        ("software", "Software terpasang", "hostname, name, version, publisher, installdate, sizemb, scope"),
+        ("snapshots", "Telemetry historis", "hostname, collectedatutc, status, cpuusagepercent, ramusedgb, ramtotalgb, disktotalgb, diskusedgb, cfreegb, uptimeseconds, offlinequeuecount"),
+        ("agentruns", "Log aktivitas agent", "hostname, startedatutc, durationms, status, agentversion, collectorsrun, itemssent, offlinequeuecount, cpupercent, memorymb, errormessage")
+    })
+    {
+        <div class="card">
+            <div class="card-head">
+                <div>
+                    <h3>@t.Item2</h3>
+                    <div class="sub"><code class="inl">@t.Item1</code> · @t.Item3</div>
+                </div>
+                <div class="right">
+                    <a class="btn btn-sm" asp-action="Template" asp-route-kind="@t.Item1"><svg><use href="#i-download"></use></svg> Template</a>
+                </div>
+            </div>
+            <form method="post" asp-action="Import" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="kind" value="@t.Item1" />
+                <input class="input" type="file" name="file" accept=".csv,.txt,text/csv" required style="flex:1 1 220px" />
+                <button class="btn btn-primary" type="submit"><svg><use href="#i-upload"></use></svg> Upload &amp; import</button>
+            </form>
+            @foreach (var r in Model.ImportResults.Where(x => x.FileName.Contains(t.Item1, StringComparison.OrdinalIgnoreCase)))
+            {
+                <div class="small" style="margin-top:8px;color:@(r.Success ? "var(--good)" : "var(--bad)")">
+                    @r.FileName: @r.RowsInserted baru · @r.RowsUpdated update · @r.RowsSkipped dilewati @(r.Error is null ? "" : "· " + r.Error)
+                </div>
+            }
+        </div>
+    }
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Catatan Import</h3>
+                <div class="sub">Urutan yang disarankan</div>
+            </div>
+        </div>
+        <ol style="margin:0;padding-left:18px;color:var(--text-muted);font-size:12.6px;line-height:1.85">
+            <li>Import <b>devices</b> terlebih dahulu — hostname menjadi kunci relasi.</li>
+            <li>Lalu <b>disks</b>, agar total storage perangkat ikut tersinkron.</li>
+            <li>Lalu <b>software</b>; status compliance dihitung otomatis berdasarkan aturan di bawah.</li>
+            <li><b>snapshots</b> dan <b>agentruns</b> opsional, dipakai untuk grafik tren &amp; halaman Agent Health.</li>
+            <li>Nilai RAM boleh diisi <code class="inl">16</code> atau <code class="inl">16 GB</code>; tanggal boleh ISO (<code class="inl">2026-10-17T02:00:00Z</code>) atau format Excel.</li>
+        </ol>
+    </div>
+</div>
+
+<div class="section-head">
+    <div>
+        <h2>API Ingest untuk Agent</h2>
+        <p>Agent di tiap PC mengirim payload JSON berikut; server melakukan upsert master + latest state disk/software + append telemetry.</p>
+    </div>
+    <div class="right">
+        <span class="chip"><svg width="12" height="12"><use href="#i-key"></use></svg> Header <code class="inl">X-Agent-Key</code> wajib</span>
+    </div>
+</div>
+
+<div class="grid g-2">
+    <div class="card">
+        <div class="card-head">
+            <div><h3>Endpoint</h3><div class="sub">Base URL: <code class="inl">@baseUrl</code></div></div>
+            <div class="right"><button class="btn btn-sm" type="button" data-copy="#ep-list"><svg><use href="#i-copy"></use></svg> Salin</button></div>
+        </div>
+        <pre class="code" id="ep-list">@endpoints</pre>
+        <div class="card-head" style="margin-top:14px"><div><h3>Contoh payload</h3><div class="sub"><code class="inl">POST /api/ingest</code></div></div>
+            <div class="right"><button class="btn btn-sm" type="button" data-copy="#ep-json"><svg><use href="#i-copy"></use></svg> Salin</button></div>
+        </div>
+        <pre class="code" id="ep-json" style="max-height:330px">@jsonSample</pre>
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <div><h3>Contoh PowerShell Collector</h3><div class="sub">Jalankan manual, via Task Scheduler, atau GPO startup script</div></div>
+            <div class="right"><button class="btn btn-sm" type="button" data-copy="#ep-ps"><svg><use href="#i-copy"></use></svg> Salin</button></div>
+        </div>
+        <pre class="code" id="ep-ps" style="max-height:640px">@psSample</pre>
+        <div class="notice info" style="margin-top:12px">
+            <svg><use href="#i-info"></use></svg>
+            <div>
+                Tersedia juga agent C# siap pakai di proyek <code class="inl">DeviceMonitor.Agent</code>
+                (bisa dipasang sebagai Windows Service, lengkap dengan offline queue &amp; retry).
+                Lihat <code class="inl">docs/DEPLOYMENT.md</code>.
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid g-2" style="margin-top:14px">
+    <div class="card">
+        <div class="card-head">
+            <div><h3>Penjadwalan dengan Task Scheduler</h3><div class="sub">Jalankan collector tiap 6 jam di setiap PC</div></div>
+            <div class="right"><button class="btn btn-sm" type="button" data-copy="#ep-task"><svg><use href="#i-copy"></use></svg> Salin</button></div>
+        </div>
+        <pre class="code" id="ep-task">@taskSample</pre>
+    </div>
+    <div class="card">
+        <div class="card-head"><div><h3>Skema Database</h3><div class="sub">Enam tabel inti yang dipakai seluruh panel</div></div></div>
+        <div class="table-wrap">
+            <table class="tbl compact">
+                <thead><tr><th>Tabel</th><th>Isi</th><th>Dipakai panel</th></tr></thead>
+                <tbody>
+                    <tr><td class="host">Devices</td><td class="muted small">Master perangkat: spesifikasi, OS, BIOS, departemen, status, last seen</td><td class="muted small">01, 02, 03</td></tr>
+                    <tr><td class="host">DiskDrives</td><td class="muted small">Kondisi partisi terkini (unik per device + drive letter)</td><td class="muted small">03</td></tr>
+                    <tr><td class="host">DeviceSnapshots</td><td class="muted small">Telemetry berkala: CPU, RAM, disk, uptime, queue agent</td><td class="muted small">01, 02, 03, 04</td></tr>
+                    <tr><td class="host">SoftwareInstalls</td><td class="muted small">Inventaris software per perangkat + status compliance</td><td class="muted small">05</td></tr>
+                    <tr><td class="host">AgentRuns</td><td class="muted small">Log eksekusi agent: durasi, status, resource, error</td><td class="muted small">04</td></tr>
+                    <tr><td class="host">ComplianceRules</td><td class="muted small">Versi minimum, versi dilarang, software wajib</td><td class="muted small">05</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="notice warn" style="margin-top:12px">
+            <svg><use href="#i-alert"></use></svg>
+            <div>Skrip skema SQL Server tersedia di <code class="inl">db/schema.sql</code> dan <code class="inl">db/migration.sql</code> (idempotent, bisa dijalankan lewat SSMS).</div>
+        </div>
+    </div>
+</div>
+
+<div class="section-head">
+    <div>
+        <h2>Aturan Compliance Software</h2>
+        <p>Versi minimum yang diizinkan, versi yang dilarang, dan software wajib. Status software dihitung ulang setiap kali aturan disimpan.</p>
+    </div>
+    <div class="right">
+        <span class="chip">@Model.ComplianceRules.Count aturan</span>
+    </div>
+</div>
+
+<div class="card tight">
+    <div class="table-wrap">
+        <table class="tbl compact">
+            <thead><tr><th>Software</th><th>Versi minimum</th><th>Versi dilarang</th><th>Wajib</th><th>Aktif</th><th>Catatan</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var r in Model.ComplianceRules)
+                {
+                    <tr>
+                        <td colspan="7" style="padding:0;border:0">
+                            <form method="post" asp-action="SaveRule" style="display:grid;grid-template-columns:1.4fr 1fr 1.2fr 62px 62px 1.6fr 44px;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--border-soft)">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@r.Id" />
+                                <input class="input" name="softwareName" value="@r.SoftwareName" />
+                                <input class="input" name="minimumVersion" value="@r.MinimumVersion" placeholder="-" />
+                                <input class="input" name="prohibitedVersions" value="@r.ProhibitedVersions" placeholder="-" />
+                                <label class="check"><input type="checkbox" name="isMandatory" value="true" @(r.IsMandatory ? "checked" : "") /></label>
+                                <label class="check"><input type="checkbox" name="isEnabled" value="true" @(r.IsEnabled ? "checked" : "") /></label>
+                                <input class="input" name="notes" value="@r.Notes" />
+                                <button class="btn btn-sm" type="submit" title="Simpan"><svg><use href="#i-online"></use></svg></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div style="padding:12px 12px 4px">
+        <form method="post" asp-action="SaveRule" style="display:grid;grid-template-columns:1.4fr 1fr 1.2fr 62px 62px 1.6fr 110px;gap:8px;align-items:center">
+            @Html.AntiForgeryToken()
+            <input class="input" name="softwareName" placeholder="Nama software baru" required />
+            <input class="input" name="minimumVersion" placeholder="Versi minimum" />
+            <input class="input" name="prohibitedVersions" placeholder="Versi dilarang (pisahkan koma)" />
+            <label class="check"><input type="checkbox" name="isMandatory" value="true" /> Wajib</label>
+            <label class="check"><input type="checkbox" name="isEnabled" value="true" checked /> Aktif</label>
+            <input class="input" name="notes" placeholder="Catatan kebijakan" />
+            <button class="btn btn-primary" type="submit"><svg><use href="#i-shield"></use></svg> Tambah aturan</button>
+        </form>
+    </div>
+</div>

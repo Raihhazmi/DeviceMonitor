@@ -1,0 +1,21 @@
+@using DeviceMonitor.Web.Models
+@using DeviceMonitor.Web.Services
+@{
+    var title = ViewData["Title"] as string ?? "Error";
+}
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@title · Device Monitoring</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+<div class="error-page">
+    <h1>@title</h1>
+    <p>Terjadi kesalahan saat memproses permintaan.</p>
+    <a class="btn btn-primary" asp-controller="Home" asp-action="Index">Kembali ke Overview</a>
+</div>
+</body>
+</html>

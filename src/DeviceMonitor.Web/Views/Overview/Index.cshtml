@@ -1,0 +1,181 @@
+@model OverviewViewModel
+@using System.Globalization
+@using DeviceMonitor.Web.Services
+@{
+    ViewData["Title"] = "Executive Overview";
+}
+
+@if (!string.IsNullOrEmpty(Model.DataNotice))
+{
+    <partial name="_Notice" model="Model.DataNotice" view-data="@V.Notice(ViewData, "warn")" />
+}
+
+<partial name="_KpiCards" model="Model.Kpis" />
+
+<div class="section-head">
+    <div>
+        <h2>Fleet Uptime &amp; Ketersediaan</h2>
+        <p>Tren @Model.UptimeTrend.Labels.Count hari terakhir, dihitung dari snapshot telemetry agent (bukan penjumlahan riwayat).</p>
+    </div>
+    <div class="right">
+        <span class="chip"><svg width="12" height="12"><use href="#i-clock"></use></svg> Perangkat dianggap offline bila tidak melapor &gt; 30 menit</span>
+    </div>
+</div>
+
+<div class="grid g-3">
+    <div class="card span-2">
+        <div class="card-head">
+            <div>
+                <h3>Fleet Uptime Trend</h3>
+                <div class="sub">Rata-rata uptime seluruh perangkat per hari (dalam hari)</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.UptimeTrend" view-data="@V.Chart(ViewData, "c-uptime-trend", "line", 232)" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Fleet Uptime Categories</h3>
+                <div class="sub">Sebaran perangkat berdasarkan lama menyala</div>
+            </div>
+        </div>
+        <partial name="_UptimeCategories" model="Model.UptimeCategories" />
+    </div>
+</div>
+
+<div class="grid g-4" style="margin-top:14px">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Ketersediaan Harian</h3>
+                <div class="sub">Perangkat online vs offline per hari</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.AvailabilityTrend" view-data="@V.Chart(ViewData, "c-avail", "line", 214)" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Perangkat per Departemen</h3>
+                <div class="sub">@Model.TotalDevices unit terdaftar</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.DepartmentChart" view-data="@V.Chart(ViewData, "c-dept", "donut", 214, "UNIT")" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Komposisi Tipe Perangkat</h3>
+                <div class="sub">Laptop vs desktop vs workstation</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.DeviceTypeChart" view-data="@V.Chart(ViewData, "c-type", "donut", 214, "UNIT")" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Perlu Perhatian</h3>
+                <div class="sub">@Model.NeedsAttention.Count perangkat offline / kritis / antrian agent</div>
+            </div>
+        </div>
+        @if (Model.NeedsAttention.Count == 0)
+        {
+            <div class="chart-empty">Semua perangkat dalam kondisi baik.</div>
+        }
+        else
+        {
+            <div class="rank scroll-y" style="max-height:224px">
+                @foreach (var r in Model.NeedsAttention)
+                {
+                    var reason = r.Status == "Offline" ? "Offline · terakhir lapor " + r.LastSeenText
+                               : r.DiskUsedPercent >= 90 ? "Disk terpakai " + V.Pct(r.DiskUsedPercent)
+                               : r.RamUsedPercent >= 85 ? "RAM terpakai " + V.Pct(r.RamUsedPercent)
+                               : r.CpuUsagePercent >= 90 ? "CPU " + V.Pct(r.CpuUsagePercent)
+                               : r.OfflineQueueCount > 0 ? r.OfflineQueueCount + " item agent tertunda"
+                               : "Perlu dicek";
+                    <div class="rank-item">
+                        <div class="lbl"><a asp-controller="Device" asp-action="Details" asp-route-id="@r.Hostname">@r.Hostname</a></div>
+                        <div class="val">@r.Department.Or()</div>
+                        <div class="sub" style="color:@(r.Status == "Offline" ? "var(--text-dim)" : "var(--bad)")">@reason</div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<div class="section-head">
+    <div>
+        <h2>Tabel Status Terkini Perangkat</h2>
+        <p>Kondisi terakhir setiap laptop/PC: status, pemakaian sumber daya, uptime, dan waktu lapor agent.</p>
+    </div>
+    <div class="right">
+        <input class="input" type="search" placeholder="Cari hostname / user / departemen…" data-table-filter="#tbl-devices" data-table-counter="#cnt-devices" />
+        <span class="chip" id="cnt-devices">@Model.DeviceStatus.Count baris</span>
+        <a class="btn btn-sm" asp-controller="Hardware" asp-action="Index">Lihat spesifikasi <svg><use href="#i-arrow"></use></svg></a>
+    </div>
+</div>
+
+<div class="card tight">
+    <div class="table-wrap scroll-y" style="max-height:560px">
+        <table class="tbl compact" id="tbl-devices" data-sortable>
+            <thead>
+                <tr>
+                    <th data-sort>Hostname</th>
+                    <th data-sort>Tipe</th>
+                    <th data-sort>Status</th>
+                    <th data-sort>Departemen</th>
+                    <th data-sort>Pengguna</th>
+                    <th data-sort>IP</th>
+                    <th data-sort>OS</th>
+                    <th class="num" data-sort>RAM</th>
+                    <th style="min-width:130px" data-sort>RAM terpakai</th>
+                    <th style="min-width:130px" data-sort>Disk terpakai</th>
+                    <th class="num" data-sort>Free</th>
+                    <th data-sort>Uptime</th>
+                    <th data-sort>Terakhir lapor</th>
+                    <th class="num" data-sort>Queue</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in Model.DeviceStatus)
+                {
+                    <tr>
+                        <td class="host"><a asp-controller="Device" asp-action="Details" asp-route-id="@r.Hostname">@r.Hostname</a></td>
+                        <td class="muted">@r.DeviceType</td>
+                        <td><partial name="_Badge" model="r.Status" /></td>
+                        <td class="muted">@r.Department.Or()</td>
+                        <td class="muted">@r.AssignedUser.Or()</td>
+                        <td class="muted" style="font-family:var(--mono);font-size:11.6px">@r.IpAddress.Or()</td>
+                        <td class="muted small">@r.OsName.Or()</td>
+                        <td class="num" data-v="@V.N0(r.RamTotalGb)">@V.N0(r.RamTotalGb) GB</td>
+                        <td data-v="@V.N1(r.RamUsedPercent)">
+                            @if (r.IsFresh)
+                            {
+                                <span class="small muted">-</span>
+                            }
+                            else
+                            {
+                                <partial name="_Bar" model="r.RamUsedPercent" />
+                            }
+                        </td>
+                        <td data-v="@V.N1(r.DiskUsedPercent)"><partial name="_Bar" model="r.DiskUsedPercent" /></td>
+                        <td class="num" data-v="@V.N1(r.DiskFreeGb)" style="color:@(r.DiskFreeGb < 20 ? "var(--bad)" : "inherit")">@V.Gb(r.DiskFreeGb)</td>
+                        <td class="muted" title="@r.UptimeCategory">@r.UptimeText</td>
+                        <td class="muted small">@r.LastSeenText</td>
+                        <td class="num" data-v="@r.OfflineQueueCount">
+                            @if (r.OfflineQueueCount > 0)
+                            {
+                                <span class="badge warn">@r.OfflineQueueCount</span>
+                            }
+                            else
+                            {
+                                <span class="small muted">0</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

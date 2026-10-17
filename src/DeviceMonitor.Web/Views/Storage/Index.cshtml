@@ -1,0 +1,280 @@
+@model StorageViewModel
+@using System.Globalization
+@using DeviceMonitor.Web.Services
+@{
+    ViewData["Title"] = "Storage & Disk Health";
+}
+
+@if (!string.IsNullOrEmpty(Model.DataNotice))
+{
+    <partial name="_Notice" model="Model.DataNotice" view-data="@V.Notice(ViewData, "warn")" />
+}
+
+<partial name="_KpiCards" model="Model.Kpis" />
+
+<div class="grid g-3" style="margin-top:14px">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Komposisi Fleet Storage</h3>
+                <div class="sub">Terpakai vs kosong (seluruh partisi)</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.StorageComposition" view-data="@V.Chart(ViewData, "c-comp", "donut", 214, "GB")" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Tren Storage Fleet</h3>
+                <div class="sub">Kapasitas vs terpakai, @Model.StorageTrend.Labels.Count hari terakhir (TB)</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.StorageTrend" view-data="@V.Chart(ViewData, "c-trend", "line", 214)" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Kesehatan Disk &amp; Media</h3>
+                <div class="sub">@Model.HealthyCount sehat · @Model.WarningCount warning · @Model.CriticalCount kritis</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.HealthChart" view-data="@V.Chart(ViewData, "c-health", "donut", 132, "UNIT", false)" />
+        <div style="margin-top:6px">
+            <partial name="_Chart" model="Model.MediaTypeChart" view-data="@V.Chart(ViewData, "c-media", "donut", 132, "PARTISI", false)" />
+        </div>
+    </div>
+</div>
+
+<div class="section-head">
+    <div>
+        <h2>Monitoring Storage Perangkat</h2>
+        <p>Catatan storage terbaru per kombinasi perangkat &amp; drive — bukan penjumlahan seluruh riwayat.</p>
+    </div>
+    <div class="right">
+        <span class="chip">Ambang warning 80% · kritis 90%</span>
+    </div>
+</div>
+
+<div class="grid g-2-1">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>15 Perangkat dengan Pemakaian Tertinggi</h3>
+                <div class="sub">Persentase total kapasitas yang terpakai</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.DeviceStorageChart" view-data="@V.Chart(ViewData, "c-dev-storage", "hbar", 380)" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Top 10 PCs with Lowest Storage</h3>
+                <div class="sub">Sisa ruang paling sedikit di seluruh partisi</div>
+            </div>
+        </div>
+        <div class="rank">
+            @for (var i = 0; i < Model.Top10LowestStorage.Count; i++)
+            {
+                var r = Model.Top10LowestStorage[i];
+                var color = r.FreeGb <= 20 ? "var(--bad)" : r.FreeGb <= 50 ? "var(--warn)" : "var(--good)";
+                <div class="rank-item">
+                    <div class="lbl"><a asp-controller="Device" asp-action="Details" asp-route-id="@r.Hostname">@r.Hostname</a></div>
+                    <div class="val" style="color:@color">@V.Gb(r.FreeGb)</div>
+                    <div class="bar"><i style="width:@V.N1(r.UsedPercent)%;background:@color"></i></div>
+                    <div class="sub">@(i + 1). @V.Pct(r.UsedPercent) terpakai dari @V.Gb(r.TotalGb) · @r.Department.Or()</div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="card tight" style="margin-top:14px">
+    <div class="card-head">
+        <div>
+            <h3>Detail Storage per Perangkat</h3>
+            <div class="sub">Partisi C, D, dan partisi lainnya beserta status kesehatan</div>
+        </div>
+        <div class="right">
+            <input class="input" type="search" placeholder="Cari perangkat…" data-table-filter="#tbl-storage" data-table-counter="#cnt-storage" />
+            <span class="chip" id="cnt-storage">@Model.DeviceStorage.Count baris</span>
+        </div>
+    </div>
+    <div class="table-wrap scroll-y" style="max-height:470px">
+        <table class="tbl compact" id="tbl-storage" data-sortable>
+            <thead>
+                <tr>
+                    <th data-sort>Hostname</th>
+                    <th data-sort>Dept</th>
+                    <th data-sort>Status</th>
+                    <th class="num" data-sort>Total</th>
+                    <th class="num" data-sort>Terpakai</th>
+                    <th style="min-width:126px" data-sort>% Terpakai</th>
+                    <th class="num" data-sort>Free</th>
+                    <th style="min-width:126px" data-sort>Partisi C</th>
+                    <th style="min-width:126px" data-sort>Partisi D</th>
+                    <th data-sort>Partisi lain</th>
+                    <th data-sort>Kesehatan</th>
+                    <th class="num" data-sort>Drive</th>
+                    <th data-sort>Diambil</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in Model.DeviceStorage)
+                {
+                    <tr>
+                        <td class="host"><a asp-controller="Device" asp-action="Details" asp-route-id="@r.Hostname">@r.Hostname</a></td>
+                        <td class="muted">@r.Department.Or()</td>
+                        <td><partial name="_Badge" model="r.Status" /></td>
+                        <td class="num" data-v="@V.N1(r.TotalGb)">@V.Gb(r.TotalGb)</td>
+                        <td class="num" data-v="@V.N1(r.UsedGb)">@V.Gb(r.UsedGb)</td>
+                        <td data-v="@V.N1(r.UsedPercent)"><partial name="_Bar" model="r.UsedPercent" /></td>
+                        <td class="num" data-v="@V.N1(r.FreeGb)" style="color:@(r.FreeGb < 20 ? "var(--bad)" : "inherit")">@V.Gb(r.FreeGb)</td>
+                        <td data-v="@V.N1(r.CUsedPercent)">
+                            @if (r.CSizeGb > 0)
+                            {
+                                <partial name="_Bar" model="r.CUsedPercent" />
+                                <div class="small muted">free @V.Gb(r.CFreeGb) / @V.Gb(r.CSizeGb)</div>
+                            }
+                            else
+                            {
+                                <span class="small muted">-</span>
+                            }
+                        </td>
+                        <td data-v="@V.N1(r.DUsedPercent)">
+                            @if (r.DSizeGb > 0)
+                            {
+                                <partial name="_Bar" model="r.DUsedPercent" />
+                                <div class="small muted">free @V.Gb(r.DFreeGb) / @V.Gb(r.DSizeGb)</div>
+                            }
+                            else
+                            {
+                                <span class="small muted">-</span>
+                            }
+                        </td>
+                        <td class="muted small">@r.OtherDrives.Or("-")</td>
+                        <td><partial name="_Badge" model="r.HealthStatus" /></td>
+                        <td class="num" data-v="@r.DriveCount">@r.DriveCount</td>
+                        <td class="muted small">@V.Ago(r.CollectedAtUtc)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="section-head">
+    <div>
+        <h2>Analisis Partisi</h2>
+        <p>Storage partisi C (sistem) dipisah dari partisi D dan partisi lainnya agar bottleneck mudah terlihat.</p>
+    </div>
+</div>
+
+<div class="grid g-2">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Storage Partisi C</h3>
+                <div class="sub">
+                    @if (Model.PartitionC is not null)
+                    {
+                        <text>@Model.PartitionC.DeviceCount perangkat · total @V.Gb(Model.PartitionC.TotalGb) · free @V.Gb(Model.PartitionC.FreeGb) · rata-rata terpakai @V.Pct(Model.PartitionC.AvgUsedPercent)</text>
+                    }
+                    else
+                    {
+                        <text>Belum ada data partisi C.</text>
+                    }
+                </div>
+            </div>
+            <div class="right">
+                @if (Model.PartitionC is not null)
+                {
+                    <span class="badge @V.HealthTone(Model.PartitionC.CriticalCount > 0 ? "Critical" : Model.PartitionC.WarningCount > 0 ? "Warning" : "Healthy")">
+                        <i></i>@Model.PartitionC.CriticalCount kritis · @Model.PartitionC.WarningCount warning
+                    </span>
+                }
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.PartitionCChart" view-data="@V.Chart(ViewData, "c-part-c", "donut", 196, "GB")" />
+        @if (Model.CriticalCDrive.Count > 0)
+        {
+            <div class="card-head" style="margin-top:14px;margin-bottom:8px">
+                <h3 style="font-size:12.4px">Partisi C paling kritis</h3>
+            </div>
+            <div class="rank scroll-y" style="max-height:170px">
+                @foreach (var r in Model.CriticalCDrive)
+                {
+                    <div class="rank-item">
+                        <div class="lbl"><a asp-controller="Device" asp-action="Details" asp-route-id="@r.Hostname">@r.Hostname</a></div>
+                        <div class="val" style="color:var(--bad)">free @V.Gb(r.CFreeGb)</div>
+                        <div class="bar"><i style="width:@V.N1(r.CUsedPercent)%;background:var(--bad)"></i></div>
+                        <div class="sub">@V.Pct(r.CUsedPercent) dari @V.Gb(r.CSizeGb) · @r.Department.Or()</div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Storage Partisi D &amp; Lainnya</h3>
+                <div class="sub">@Model.OtherPartitions.Count partisi non-sistem terdeteksi</div>
+            </div>
+        </div>
+        @if (Model.OtherPartitions.Count == 0)
+        {
+            <div class="chart-empty">Tidak ada partisi selain C yang dilaporkan.</div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="tbl compact">
+                    <thead>
+                        <tr><th>Partisi</th><th class="num">Perangkat</th><th class="num">Total</th><th class="num">Free</th><th class="num">Rata-rata</th><th class="num">Kritis</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Model.OtherPartitions)
+                        {
+                            <tr>
+                                <td><span class="badge @(p.Tone)"><i></i>@p.DriveLetter:</span></td>
+                                <td class="num">@p.DeviceCount</td>
+                                <td class="num">@V.Gb(p.TotalGb)</td>
+                                <td class="num">@V.Gb(p.FreeGb)</td>
+                                <td class="num" style="color:@V.ToneColor(p.AvgUsedPercent, 70, 85)">@V.Pct(p.AvgUsedPercent)</td>
+                                <td class="num">
+                                    @if (p.CriticalCount > 0)
+                                    {
+                                        <span class="badge bad">@p.CriticalCount</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="small muted">0</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        <div style="margin-top:14px">
+            <partial name="_Chart" model="Model.PartitionUsageChart" view-data="@V.Chart(ViewData, "c-part-usage", "bar", 178)" />
+        </div>
+        @if (Model.CriticalOtherDrives.Count > 0)
+        {
+            <div class="card-head" style="margin-top:12px;margin-bottom:6px">
+                <h3 style="font-size:12.4px">Partisi non-C yang kritis</h3>
+            </div>
+            <div class="rank scroll-y" style="max-height:150px">
+                @foreach (var r in Model.CriticalOtherDrives)
+                {
+                    <div class="rank-item">
+                        <div class="lbl">@r.Hostname <span class="small muted">(@r.OtherDrives.Or())</span></div>
+                        <div class="val" style="color:var(--bad)">free @V.Gb(r.FreeGb)</div>
+                        <div class="bar"><i style="width:@V.N1(r.UsedPercent)%;background:var(--bad)"></i></div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>

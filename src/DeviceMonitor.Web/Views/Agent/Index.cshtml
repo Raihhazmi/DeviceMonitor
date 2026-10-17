@@ -1,0 +1,292 @@
+@model AgentHealthViewModel
+@using System.Globalization
+@using DeviceMonitor.Web.Services
+@{
+    ViewData["Title"] = "Agent Health & Telemetry";
+}
+
+@if (!string.IsNullOrEmpty(Model.DataNotice))
+{
+    <partial name="_Notice" model="Model.DataNotice" view-data="@V.Notice(ViewData, "warn")" />
+}
+
+<partial name="_KpiCards" model="Model.Kpis" />
+
+<div class="section-head">
+    <div>
+        <h2>Avg Execution Duration</h2>
+        <p>Durasi eksekusi collector agent per hari dan sebarannya dalam 30 hari terakhir (@V.N0(Model.TotalRuns) run tercatat).</p>
+    </div>
+    <div class="right">
+        <span class="chip">P95 @V.Ms(Model.P95ExecutionMs)</span>
+        <span class="chip">Max @V.Ms(Model.MaxExecutionMs)</span>
+    </div>
+</div>
+
+<div class="grid g-2">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Tren Durasi Eksekusi</h3>
+                <div class="sub">Rata-rata durasi per hari (ms)</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.ExecutionTrend" view-data="@V.Chart(ViewData, "c-exec-trend", "line", 214)" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Sebaran Durasi Eksekusi</h3>
+                <div class="sub">Jumlah run per rentang durasi</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.ExecutionHistogram" view-data="@V.Chart(ViewData, "c-exec-hist", "bar", 214)" />
+    </div>
+</div>
+
+<div class="section-head">
+    <div>
+        <h2>Agent Sync Status Distribution</h2>
+        <p>Status sinkronisasi perangkat dan hasil eksekusi agent (Success / Partial / Queued / Failed).</p>
+    </div>
+    <div class="right">
+        <span class="chip">Success rate @V.Pct(Model.SuccessRate)</span>
+        <span class="chip" style="color:@(Model.FailedRuns > 0 ? "var(--bad)" : "inherit")">@Model.FailedRuns run gagal</span>
+    </div>
+</div>
+
+<div class="grid g-3">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Status Perangkat</h3>
+                <div class="sub">Berdasarkan laporan agent terakhir</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.SyncStatusChart" view-data="@V.Chart(ViewData, "c-sync", "donut", 220, "UNIT")" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Hasil Run Agent</h3>
+                <div class="sub">30 hari terakhir</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.RunStatusChart" view-data="@V.Chart(ViewData, "c-runstatus", "donut", 220, "RUN")" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Versi Agent &amp; Collector</h3>
+                <div class="sub">@Model.AgentVersions.Sum(a => a.Count) perangkat · @Model.CollectorMixChart.Labels.Count jenis collector</div>
+            </div>
+        </div>
+        <div class="scroll-y" style="max-height:104px">
+            @foreach (var v in Model.AgentVersions)
+            {
+                <div class="stat-row">
+                    <div class="name" style="font-family:var(--mono)">@v.Name</div>
+                    <div class="bar"><i style="width:@V.N1(v.Percent)%;background:var(--violet)"></i></div>
+                    <div class="val">@v.Count</div>
+                </div>
+            }
+        </div>
+        <div style="margin-top:8px">
+            <partial name="_Chart" model="Model.CollectorMixChart" view-data="@V.Chart(ViewData, "c-collector", "hbar", 120)" />
+        </div>
+    </div>
+</div>
+
+<div class="grid g-2" style="margin-top:14px">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Offline Queue Accumulation</h3>
+                <div class="sub">Akumulasi payload yang tertunda dikirim agent per hari</div>
+            </div>
+            <div class="right">
+                <span class="chip">@Model.TotalQueuedItems item tertunda di @Model.DevicesWithQueue perangkat</span>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.QueueChart" view-data="@V.Chart(ViewData, "c-queue", "line", 190)" />
+        @if (Model.QueueDevices.Count > 0)
+        {
+            <div class="table-wrap scroll-y" style="max-height:180px;margin-top:10px">
+                <table class="tbl compact">
+                    <thead><tr><th>Perangkat</th><th>Status</th><th>Terakhir lapor</th><th class="num">Queue</th></tr></thead>
+                    <tbody>
+                        @foreach (var d in Model.QueueDevices)
+                        {
+                            <tr>
+                                <td class="host"><a asp-controller="Device" asp-action="Details" asp-route-id="@d.Hostname">@d.Hostname</a></td>
+                                <td><partial name="_Badge" model="d.Status" /></td>
+                                <td class="muted small">@d.LastSeenText</td>
+                                <td class="num"><span class="badge warn">@d.OfflineQueueCount item</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Agent Resource Footprint</h3>
+                <div class="sub">Rata-rata CPU @V.N2(Model.AvgAgentCpu)% · memori @V.N1(Model.AvgAgentMemoryMb) MB · puncak CPU @V.N2(Model.MaxAgentCpu)%</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.FootprintTrend" view-data="@V.Chart(ViewData, "c-footprint", "line", 150)" />
+        <div class="card-head" style="margin-top:12px;margin-bottom:0">
+            <h3 style="font-size:12.4px">Memori proses agent (MB)</h3>
+        </div>
+        <partial name="_Chart" model="Model.MemoryTrend" view-data="@V.Chart(ViewData, "c-memtrend", "line", 150)" />
+        <div class="card-head" style="margin-top:12px;margin-bottom:6px">
+            <h3 style="font-size:12.4px">Agent dengan CPU tertinggi</h3>
+        </div>
+        <div class="rank scroll-y" style="max-height:150px">
+            @foreach (var a in Model.HeaviestAgents)
+            {
+                <div class="rank-item">
+                    <div class="lbl">@a.Name</div>
+                    <div class="val">@a.Sub</div>
+                    <div class="bar"><i style="width:@V.N1(Math.Min(100, a.Percent * 12))%;background:var(--info)"></i></div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="section-head">
+    <div>
+        <h2>Log Riwayat Aktivitas Agent</h2>
+        <p>Setiap eksekusi collector: durasi, status, jumlah item terkirim, resource yang dipakai, dan pesan error.</p>
+    </div>
+    <div class="right">
+        <form class="filters" method="get" asp-controller="Agent" asp-action="Index">
+            <input class="input" type="search" name="q" value="@Model.LogFilter" placeholder="Cari hostname / error…" />
+            <select class="input" name="status">
+                <option value="">Semua status</option>
+                @foreach (var s in new[] { "Success", "Partial", "Queued", "Failed", "Error" })
+                {
+                    if (Model.StatusFilter == s)
+                    {
+                        <option value="@s" selected>@s</option>
+                    }
+                    else
+                    {
+                        <option value="@s">@s</option>
+                    }
+                }
+            </select>
+            <button class="btn btn-primary" type="submit"><svg><use href="#i-search"></use></svg> Terapkan</button>
+            @if (!string.IsNullOrEmpty(Model.LogFilter) || !string.IsNullOrEmpty(Model.StatusFilter))
+            {
+                <a class="btn" asp-controller="Agent" asp-action="Index">Reset</a>
+            }
+        </form>
+    </div>
+</div>
+
+<div class="card tight">
+    <div class="table-wrap">
+        <table class="tbl compact" data-sortable>
+            <thead>
+                <tr>
+                    <th data-sort>Waktu (UTC)</th>
+                    <th data-sort>Hostname</th>
+                    <th data-sort>Status</th>
+                    <th class="num" data-sort>Durasi</th>
+                    <th data-sort>Collector</th>
+                    <th class="num" data-sort>Item</th>
+                    <th class="num" data-sort>Queue</th>
+                    <th class="num" data-sort>CPU</th>
+                    <th class="num" data-sort>Mem</th>
+                    <th data-sort>Agent</th>
+                    <th data-sort>Trigger</th>
+                    <th>Error</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var l in Model.Logs)
+                {
+                    <tr>
+                        <td class="muted" style="font-family:var(--mono);font-size:11.4px;white-space:nowrap">@l.StartedAtUtc.ToString("dd MMM HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                        <td class="host"><a asp-controller="Device" asp-action="Details" asp-route-id="@l.Hostname">@l.Hostname</a></td>
+                        <td><partial name="_Badge" model="l.Status" /></td>
+                        <td class="num" data-v="@V.N1(l.DurationMs)" style="color:@(l.DurationMs > 10000 ? "var(--warn)" : "inherit")">@V.Ms(l.DurationMs)</td>
+                        <td class="muted small">@l.CollectorsRun.Or()</td>
+                        <td class="num" data-v="@l.ItemsSent">@l.ItemsSent</td>
+                        <td class="num" data-v="@l.OfflineQueueCount">
+                            @if (l.OfflineQueueCount > 0)
+                            {
+                                <span class="badge warn">@l.OfflineQueueCount</span>
+                            }
+                            else
+                            {
+                                <span class="small muted">0</span>
+                            }
+                        </td>
+                        <td class="num" data-v="@V.N2(l.CpuPercent)">@V.N2(l.CpuPercent)%</td>
+                        <td class="num" data-v="@V.N1(l.MemoryMb)">@V.N1(l.MemoryMb) MB</td>
+                        <td class="muted small">v@(l.AgentVersion.Or().TrimStart('v'))</td>
+                        <td class="muted small">@l.TriggerSource.Or()</td>
+                        <td class="small" style="color:var(--bad);max-width:280px">@l.ErrorMessage.Or("")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pager">
+        <span class="info">
+            Menampilkan @((Model.LogPage - 1) * Model.LogPageSize + 1)–@(Math.Min(Model.LogPage * Model.LogPageSize, Model.LogTotalCount)) dari @V.N0(Model.LogTotalCount) log
+        </span>
+        @for (var p = Math.Max(1, Model.LogPage - 3); p <= Math.Min(Model.LogTotalPages, Model.LogPage + 3); p++)
+        {
+            var pp = p;
+            if (pp == Model.LogPage)
+            {
+                <span class="pg on">@pp</span>
+            }
+            else
+            {
+                <a class="pg" asp-controller="Agent" asp-action="Index"
+                   asp-route-page="@pp" asp-route-q="@Model.LogFilter" asp-route-status="@Model.StatusFilter" asp-route-size="@Model.LogPageSize">@pp</a>
+            }
+        }
+        @if (Model.LogPage < Model.LogTotalPages)
+        {
+            <a asp-controller="Agent" asp-action="Index" asp-route-page="@(Model.LogPage + 1)" asp-route-q="@Model.LogFilter" asp-route-status="@Model.StatusFilter" asp-route-size="@Model.LogPageSize">Berikutnya →</a>
+        }
+    </div>
+</div>
+
+@if (Model.ErrorLogs.Count > 0)
+{
+    <div class="section-head">
+        <div>
+            <h2>Error Terbaru</h2>
+            <p>Delapan kegagalan agent terakhir untuk tindak lanjut cepat.</p>
+        </div>
+    </div>
+    <div class="card tight">
+        <div class="table-wrap">
+            <table class="tbl compact">
+                <thead><tr><th>Waktu</th><th>Hostname</th><th>Status</th><th>Durasi</th><th>Pesan error</th></tr></thead>
+                <tbody>
+                    @foreach (var e in Model.ErrorLogs)
+                    {
+                        <tr>
+                            <td class="muted" style="font-family:var(--mono);font-size:11.4px;white-space:nowrap">@e.StartedAtUtc.ToString("dd MMM HH:mm", CultureInfo.InvariantCulture)</td>
+                            <td class="host"><a asp-controller="Device" asp-action="Details" asp-route-id="@e.Hostname">@e.Hostname</a></td>
+                            <td><partial name="_Badge" model="e.Status" /></td>
+                            <td class="num">@V.Ms(e.DurationMs)</td>
+                            <td class="small" style="color:var(--bad)">@e.ErrorMessage.Or("-")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

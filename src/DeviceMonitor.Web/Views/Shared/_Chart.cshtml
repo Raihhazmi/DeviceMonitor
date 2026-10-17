@@ -1,0 +1,24 @@
+@model ChartModel
+@using System.Text.Json
+@{
+    var id = ViewData["chartId"] as string ?? ("chart-" + Guid.NewGuid().ToString("N")[..8]);
+    var type = ViewData["chartType"] as string ?? "bar";
+    var height = (int)(ViewData["chartHeight"] ?? 230);
+    var center = ViewData["chartCenter"] as string ?? "TOTAL";
+    var legend = ViewData["chartLegend"] is bool b ? b : true;
+
+    var payload = new
+    {
+        type,
+        height,
+        centerLabel = center,
+        legend,
+        labels = Model.Labels,
+        valueSuffix = Model.ValueSuffix,
+        sliceColors = Model.SliceColors,
+        meta = Model.Meta,
+        series = Model.Series.Select(s => new { name = s.Name, color = s.Color, fill = s.Fill, data = s.Data })
+    };
+}
+<div class="chart" data-chart="@id" data-type="@type" data-height="@height"></div>
+<script type="application/json" id="@id">@Html.Raw(JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }))</script>

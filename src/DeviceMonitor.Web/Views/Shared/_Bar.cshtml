@@ -1,0 +1,12 @@
+@model double
+@* Progress bar kecil: ViewData["value"] = 0..100, ViewData["tone"] = good|warn|bad|auto *@
+@{
+    var value = Model;
+    var tone = ViewData["tone"] as string ?? "auto";
+    if (tone == "auto") tone = value >= 90 ? "bad" : value >= 75 ? "warn" : "good";
+    var width = Math.Clamp(value, 0, 100).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+}
+<div class="mbar-cell">
+    <div class="mbar @tone"><i style="width:@width%"></i></div>
+    <span>@(value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%</span>
+</div>

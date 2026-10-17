@@ -1,0 +1,25 @@
+@model string
+@* Badge status: Online / Offline / Warning / Error / Healthy / Critical / Compliant ... *@
+@{
+    var v = (Model ?? "").Trim();
+    var cls = v.ToLowerInvariant() switch
+    {
+        "online" => "good",
+        "healthy" => "good",
+        "compliant" => "good",
+        "success" => "good",
+        "offline" => "muted",
+        "unmanaged" => "muted",
+        "unknown" => "muted",
+        "warning" => "warn",
+        "outdated" => "warn",
+        "partial" => "warn",
+        "queued" => "info",
+        "error" => "bad",
+        "critical" => "bad",
+        "failed" => "bad",
+        "prohibited" => "bad",
+        _ => "info"
+    };
+}
+<span class="badge @cls"><i></i>@v</span>

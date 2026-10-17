@@ -1,0 +1,46 @@
+@model List<KpiCard>
+@{
+    string IconOf(string? name) => name switch
+    {
+        "device" => "#i-device",
+        "online" => "#i-online",
+        "offline" => "#i-offline",
+        "storage" => "#i-storage",
+        "disk" => "#i-disk",
+        "ram" => "#i-ram",
+        "cpu" => "#i-cpu",
+        "clock" => "#i-clock",
+        "sync" => "#i-sync",
+        "queue" => "#i-queue",
+        "apps" => "#i-apps",
+        "shield" => "#i-shield",
+        "alert" => "#i-alert",
+        "database" => "#i-database",
+        "gauge" => "#i-gauge",
+        "used" => "#i-storage",
+        "free" => "#i-disk",
+        "version" => "#i-list",
+        "publisher" => "#i-user",
+        _ => "#i-gauge"
+    };
+}
+<div class="kpis">
+    @foreach (var k in Model)
+    {
+        <div class="kpi" data-tone="@k.Tone">
+            <div class="kpi-top">
+                <div class="kpi-ico"><svg><use href="@IconOf(k.Icon)"></use></svg></div>
+                <div class="kpi-title">@k.Title</div>
+            </div>
+            <div class="kpi-value">@k.Value</div>
+            @if (!string.IsNullOrEmpty(k.Sub))
+            {
+                <div class="kpi-sub">@k.Sub</div>
+            }
+            @if (k.Progress is not null)
+            {
+                <div class="kpi-bar"><i style="width:@(Math.Clamp(k.Progress.Value, 0, 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%"></i></div>
+            }
+        </div>
+    }
+</div>

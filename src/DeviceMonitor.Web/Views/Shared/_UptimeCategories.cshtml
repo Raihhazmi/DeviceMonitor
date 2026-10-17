@@ -1,0 +1,33 @@
+@model List<UptimeCategory>
+@* Fleet Uptime Categories *@
+@{
+    var max = Model.Count == 0 ? 1 : Model.Max(m => m.Count);
+    if (max == 0) max = 1;
+}
+@if (Model.Count == 0)
+{
+    <div class="chart-empty">Belum ada data uptime.</div>
+}
+else
+{
+    <div class="rank">
+        @foreach (var c in Model)
+        {
+            var color = c.Tone switch
+            {
+                "good" => "var(--good)",
+                "warn" => "var(--warn)",
+                "bad" => "var(--bad)",
+                "info" => "var(--info)",
+                _ => "var(--text-dim)"
+            };
+            var pct = 100.0 * c.Count / max;
+            <div class="rank-item">
+                <div class="lbl">@c.Category</div>
+                <div class="val">@c.Count unit · @c.Percent.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%</div>
+                <div class="bar"><i style="width:@(pct.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%;background:@color"></i></div>
+                <div class="sub">@c.Note</div>
+            </div>
+        }
+    </div>
+}

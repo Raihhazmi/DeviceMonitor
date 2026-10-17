@@ -1,0 +1,146 @@
+@model DeviceDetailViewModel
+@using System.Globalization
+@using DeviceMonitor.Shared.Entities
+@using DeviceMonitor.Web.Services
+@{
+    ViewData["Title"] = Model.Device.Hostname;
+    var d = Model.Device;
+}
+
+<div class="section-head" style="margin-top:0">
+    <div>
+        <h2 style="font-size:18px">@d.Hostname</h2>
+        <p>@d.DeviceType · @d.Manufacturer.Or() @d.Model.Or() · @d.Department.Or() · @d.Location.Or()</p>
+    </div>
+    <div class="right">
+        <a class="btn btn-sm" asp-controller="Overview" asp-action="Index">← Kembali ke Overview</a>
+    </div>
+</div>
+
+<partial name="_KpiCards" model="Model.Kpis" />
+
+<div class="grid g-3" style="margin-top:14px">
+    <div class="card">
+        <div class="card-head"><div><h3>CPU &amp; RAM</h3><div class="sub">@Model.CpuRamTrend.Labels.Count titik data terakhir</div></div></div>
+        <partial name="_Chart" model="Model.CpuRamTrend" view-data="@V.Chart(ViewData, "c-dev-cpuram", "line", 200)" />
+    </div>
+    <div class="card">
+        <div class="card-head"><div><h3>Storage</h3><div class="sub">Total terpakai &amp; sisa ruang partisi C (GB)</div></div></div>
+        <partial name="_Chart" model="Model.StorageTrend" view-data="@V.Chart(ViewData, "c-dev-storage", "line", 200)" />
+    </div>
+    <div class="card">
+        <div class="card-head"><div><h3>Uptime</h3><div class="sub">Lama perangkat menyala (jam)</div></div></div>
+        <partial name="_Chart" model="Model.UptimeTrend" view-data="@V.Chart(ViewData, "c-dev-uptime", "line", 200)" />
+    </div>
+</div>
+
+<div class="grid g-2" style="margin-top:14px">
+    <div class="card">
+        <div class="card-head"><div><h3>Spesifikasi Sistem</h3><div class="sub">Data hardware terbaru dari agent</div></div></div>
+        <dl class="kv">
+            <dt>Hostname</dt><dd>@d.Hostname</dd>
+            <dt>Asset Tag</dt><dd>@d.AssetTag.Or()</dd>
+            <dt>Tipe</dt><dd>@d.DeviceType</dd>
+            <dt>Manufacturer</dt><dd>@d.Manufacturer.Or()</dd>
+            <dt>Model</dt><dd>@d.Model.Or()</dd>
+            <dt>Serial Number</dt><dd style="font-family:var(--mono)">@d.SerialNumber.Or()</dd>
+            <dt>Prosesor</dt><dd>@d.CpuName.Or() <span class="small muted">(@d.CpuCores core / @d.CpuLogicalProcessors thread)</span></dd>
+            <dt>RAM</dt><dd>@V.N0(d.RamTotalGb) GB</dd>
+            <dt>OS</dt><dd>@d.OsName.Or() <span class="small muted">@d.OsVersion.Or()</span></dd>
+            <dt>Build</dt><dd>@d.OsBuild.Or() (@d.OsArchitecture.Or())</dd>
+            <dt>BIOS</dt><dd style="font-family:var(--mono)">@d.BiosVersion.Or() <span class="small muted">@d.BiosVendor.Or() · @V.D(d.BiosReleaseDate)</span></dd>
+            <dt>IP / MAC</dt><dd style="font-family:var(--mono)">@d.IpAddress.Or() / @d.MacAddress.Or()</dd>
+            <dt>Domain</dt><dd>@d.Domain.Or()</dd>
+            <dt>Pengguna</dt><dd>@d.AssignedUser.Or()</dd>
+            <dt>Departemen / Lokasi</dt><dd>@d.Department.Or() · @d.Location.Or()</dd>
+            <dt>Versi Agent</dt><dd>v@(d.AgentVersion.Or("1.0.0").TrimStart('v'))</dd>
+            <dt>Terdaftar sejak</dt><dd>@V.D(d.FirstSeenUtc)</dd>
+            <dt>Terakhir lapor</dt><dd>@V.When(d.LastSeenUtc) <span class="small muted">(@V.Ago(d.LastSeenUtc))</span></dd>
+        </dl>
+    </div>
+
+    <div class="card">
+        <div class="card-head"><div><h3>Partisi Disk</h3><div class="sub">Total @V.Gb(d.TotalDiskGb) · terpakai @V.Gb(d.UsedDiskGb)</div></div></div>
+        <div class="table-wrap">
+            <table class="tbl compact">
+                <thead><tr><th>Drive</th><th>Label</th><th>Media</th><th class="num">Kapasitas</th><th class="num">Free</th><th style="min-width:120px">% Terpakai</th><th>Kesehatan</th></tr></thead>
+                <tbody>
+                    @foreach (var disk in Model.Disks)
+                    {
+                        <tr>
+                            <td style="font-weight:700">@disk.DriveLetter:</td>
+                            <td class="muted">@disk.Label.Or()</td>
+                            <td class="muted small">@disk.MediaType @disk.DriveType</td>
+                            <td class="num" data-v="@V.N1(disk.SizeGb)">@V.Gb(disk.SizeGb)</td>
+                            <td class="num" data-v="@V.N1(disk.FreeGb)" style="color:@(disk.FreeGb < 20 ? "var(--bad)" : "inherit")">@V.Gb(disk.FreeGb)</td>
+                            <td data-v="@V.N1(disk.UsedPercent)"><partial name="_Bar" model="disk.UsedPercent" /></td>
+                            <td><partial name="_Badge" model="disk.HealthStatus" /></td>
+                        </tr>
+                    }
+                    @if (Model.Disks.Count == 0)
+                    {
+                        <tr><td colspan="7" class="chart-empty">Belum ada data partisi.</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card-head" style="margin-top:16px">
+            <div><h3>Aktivitas Agent Terakhir</h3><div class="sub">@Model.Runs.Count run terbaru</div></div>
+        </div>
+        <div class="table-wrap scroll-y" style="max-height:220px">
+            <table class="tbl compact">
+                <thead><tr><th>Waktu</th><th>Status</th><th class="num">Durasi</th><th class="num">Item</th><th class="num">CPU</th><th class="num">Mem</th></tr></thead>
+                <tbody>
+                    @foreach (var r in Model.Runs.Take(12))
+                    {
+                        <tr>
+                            <td class="muted" style="font-family:var(--mono);font-size:11.4px;white-space:nowrap">@r.StartedAtUtc.ToString("dd MMM HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                            <td><partial name="_Badge" model="r.Status" /></td>
+                            <td class="num" data-v="@V.N1(r.DurationMs)">@V.Ms(r.DurationMs)</td>
+                            <td class="num" data-v="@r.ItemsSent">@r.ItemsSent</td>
+                            <td class="num" data-v="@V.N2(r.CpuPercent)">@V.N2(r.CpuPercent)%</td>
+                            <td class="num" data-v="@V.N1(r.MemoryMb)">@V.N1(r.MemoryMb) MB</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="section-head">
+    <div>
+        <h2>Software Terpasang</h2>
+        <p>@Model.Software.Count aplikasi terdeteksi pada perangkat ini.</p>
+    </div>
+    <div class="right">
+        <input class="input" type="search" placeholder="Cari software…" data-table-filter="#tbl-devsw" data-table-counter="#cnt-devsw" />
+        <span class="chip" id="cnt-devsw">@Model.Software.Count baris</span>
+        <a class="btn btn-sm" asp-controller="Software" asp-action="Index" asp-route-q="@d.Hostname">Lihat di inventaris <svg><use href="#i-arrow"></use></svg></a>
+    </div>
+</div>
+
+<div class="card tight">
+    <div class="table-wrap scroll-y" style="max-height:460px">
+        <table class="tbl compact" id="tbl-devsw" data-sortable>
+            <thead>
+                <tr><th data-sort>Nama Software</th><th data-sort>Versi</th><th data-sort>Publisher</th><th data-sort>Tanggal Instal</th><th class="num" data-sort>Ukuran</th><th data-sort>Scope</th><th data-sort>Compliance</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var s in Model.Software)
+                {
+                    <tr>
+                        <td style="font-weight:600">@s.Name</td>
+                        <td style="font-family:var(--mono);font-size:11.8px">@s.Version</td>
+                        <td class="muted small">@s.Publisher.Or()</td>
+                        <td class="muted small">@V.D(s.InstallDate)</td>
+                        <td class="num" data-v="@V.N1(s.SizeMb)">@V.Mb(s.SizeMb)</td>
+                        <td class="muted small">@s.Scope.Or()</td>
+                        <td><partial name="_Badge" model="s.ComplianceStatus" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

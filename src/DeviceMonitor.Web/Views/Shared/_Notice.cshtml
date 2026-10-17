@@ -1,0 +1,11 @@
+@model string
+@* Notifikasi: ViewData["type"] = ok | warn | err | info *@
+@if (!string.IsNullOrWhiteSpace(Model))
+{
+    var type = ViewData["type"] as string ?? "info";
+    var icon = type switch { "ok" => "#i-online", "warn" => "#i-alert", "err" => "#i-alert", _ => "#i-info" };
+    <div class="notice @type">
+        <svg><use href="@icon"></use></svg>
+        <div>@Html.Raw(Model)</div>
+    </div>
+}

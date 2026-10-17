@@ -1,0 +1,125 @@
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+@{
+    var title = ViewData["Title"] as string ?? "Dashboard";
+    var pageCode = ViewData["PageCode"] as string ?? "";
+    var active = ViewData["NavActive"] as string ?? "";
+    var provider = Config["Monitor:Provider"] ?? "SqlServer";
+    var dbName = provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase) ? "SQLite (mode demo)" : "SQL Server";
+}
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>@title · Device Monitoring</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%234f8cff'/><path d='M7 21l5-6 4 4 4-7 5 9z' fill='white'/></svg>" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <script>
+        // terapkan tema sebelum render agar tidak terjadi "flash"
+        (function () {
+            try {
+                var t = localStorage.getItem('dm-theme') || 'dark';
+                document.documentElement.setAttribute('data-theme', t);
+            } catch (e) { }
+        })();
+    </script>
+</head>
+<body>
+    <partial name="_Icons" />
+    <div class="app">
+        <div class="sidebar-col">
+        <aside class="sidebar" id="sidebar">
+            <div class="brand">
+                <div class="brand-mark"><svg><use href="#i-logo"></use></svg></div>
+                <div class="brand-text">
+                    <b>Device Monitor</b>
+                    <span>IT Infrastructure</span>
+                </div>
+            </div>
+
+            <div class="nav-group">Monitoring</div>
+            <a class="nav-item @(active == "overview" ? "active" : "")" asp-controller="Overview" asp-action="Index">
+                <svg><use href="#i-gauge"></use></svg> Executive Overview <span class="nav-code">01</span>
+            </a>
+            <a class="nav-item @(active == "hardware" ? "active" : "")" asp-controller="Hardware" asp-action="Index">
+                <svg><use href="#i-chip"></use></svg> Hardware &amp; System <span class="nav-code">02</span>
+            </a>
+            <a class="nav-item @(active == "storage" ? "active" : "")" asp-controller="Storage" asp-action="Index">
+                <svg><use href="#i-disk"></use></svg> Storage &amp; Disk Health <span class="nav-code">03</span>
+            </a>
+            <a class="nav-item @(active == "agent" ? "active" : "")" asp-controller="Agent" asp-action="Index">
+                <svg><use href="#i-sync"></use></svg> Agent Health <span class="nav-code">04</span>
+            </a>
+            <a class="nav-item @(active == "software" ? "active" : "")" asp-controller="Software" asp-action="Index">
+                <svg><use href="#i-apps"></use></svg> Software &amp; Compliance <span class="nav-code">05</span>
+            </a>
+
+            <div class="nav-group">Data</div>
+            <a class="nav-item @(active == "data" ? "active" : "")" asp-controller="Data" asp-action="Index">
+                <svg><use href="#i-database"></use></svg> Data &amp; Ingest <span class="nav-code">API</span>
+            </a>
+
+            <div class="sidebar-foot">
+                <div class="db-chip">
+                    <svg width="13" height="13"><use href="#i-database"></use></svg>
+                    @dbName
+                </div>
+                <div>Device Monitoring Dashboard<br />v1.0.0 · @DateTime.UtcNow.ToString("yyyy")</div>
+            </div>
+        </aside>
+        </div>
+
+        <div class="main">
+            <header class="topbar">
+                <button class="btn btn-icon burger" data-burger type="button" aria-label="Menu">
+                    <svg><use href="#i-menu"></use></svg>
+                </button>
+                <div>
+                    <div class="crumb">@(string.IsNullOrEmpty(pageCode) ? "DASHBOARD" : "SECTION " + pageCode)</div>
+                    <h1>@title</h1>
+                </div>
+
+                <div class="topbar-right" data-summary data-url="/api/summary">
+                    <span class="live-pill" title="Ringkasan fleet (auto-update 30 detik)">
+                        <span class="dot pulse"></span>
+                        <b data-f="online">-</b> online / <b data-f="totalDevices">-</b> unit
+                    </span>
+                    <span class="live-pill" title="Drive kritis">
+                        <svg width="13" height="13"><use href="#i-alert"></use></svg>
+                        <b data-f="criticalDisk">-</b> kritis
+                    </span>
+                    <span class="live-pill" title="Waktu data terakhir">
+                        <svg width="13" height="13"><use href="#i-clock"></use></svg>
+                        <span data-time>--:--:--</span>
+                    </span>
+                    <label class="live-pill" title="Muat ulang halaman otomatis tiap 60 detik">
+                        <input type="checkbox" data-auto-refresh data-interval="60000" style="accent-color:var(--accent)" />
+                        Auto
+                    </label>
+                    <div class="theme-toggle" role="group" aria-label="Ganti tema">
+                        <button type="button" data-theme-btn="dark" title="Tema gelap"><svg><use href="#i-moon"></use></svg></button>
+                        <button type="button" data-theme-btn="light" title="Tema terang"><svg><use href="#i-sun"></use></svg></button>
+                    </div>
+                    <button class="btn btn-icon" type="button" onclick="window.print()" title="Cetak / simpan PDF">
+                        <svg><use href="#i-print"></use></svg>
+                    </button>
+                </div>
+            </header>
+
+            <main class="content">
+                @RenderBody()
+            </main>
+
+            <footer class="foot">
+                <span>Device Monitoring Dashboard · Departemen IT</span>
+                <span>Sumber data: agent collector di tiap perangkat → <code class="inl">POST /api/ingest</code> → @(dbName)</span>
+                <span style="margin-left:auto">Render @(DateTime.UtcNow.ToString("dd MMM yyyy HH:mm")) UTC</span>
+            </footer>
+        </div>
+    </div>
+
+    <script src="~/js/charts.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

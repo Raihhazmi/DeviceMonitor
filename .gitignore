@@ -1,0 +1,26 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## runtime/data lokal
+*.db
+*.db-shm
+*.db-wal
+devicemonitor.db*
+
+## tools & cache
+.playwright/
+node_modules/
+__pycache__/
+*.log
+
+## publish
+publish/
+out/
+
+## sandbox/runtime
+/tmp/
+NO_PUSH.txt

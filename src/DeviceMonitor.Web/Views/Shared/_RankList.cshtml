@@ -1,0 +1,39 @@
+@model List<NameCount>
+@* Daftar peringkat horizontal (nama + nilai + bar). ViewData: max, suffix, showSub *@
+@{
+    var suffix = ViewData["suffix"] as string ?? "";
+    var showSub = ViewData["showSub"] as bool? ?? true;
+    var max = Model.Count == 0 ? 1 : Model.Max(m => m.Count);
+    if (ViewData["max"] is double md && md > 0) max = (int)Math.Ceiling(md);
+}
+@if (Model.Count == 0)
+{
+    <div class="chart-empty">Belum ada data.</div>
+}
+else
+{
+    <div class="rank">
+        @for (var i = 0; i < Model.Count; i++)
+        {
+            var m = Model[i];
+            var color = m.Tone switch
+            {
+                "good" => "var(--good)",
+                "warn" => "var(--warn)",
+                "bad" => "var(--bad)",
+                "info" => "var(--info)",
+                _ => Fmt.Color(i)
+            };
+            var pct = max <= 0 ? 0 : 100.0 * m.Count / max;
+            <div class="rank-item">
+                <div class="lbl" title="@m.Name">@m.Name</div>
+                <div class="val">@m.Count@suffix</div>
+                <div class="bar"><i style="width:@(pct.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%;background:@color"></i></div>
+                @if (showSub && !string.IsNullOrWhiteSpace(m.Sub))
+                {
+                    <div class="sub">@m.Sub</div>
+                }
+            </div>
+        }
+    </div>
+}

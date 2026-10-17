@@ -1,0 +1,334 @@
+@model HardwareViewModel
+@using System.Globalization
+@using DeviceMonitor.Web.Services
+@{
+    ViewData["Title"] = "Hardware & System Inventory";
+
+    static string Short(string? s, int max)
+        => string.IsNullOrWhiteSpace(s) ? "-" : (s!.Length <= max ? s : s[..(max - 1)] + "…");
+}
+
+@if (!string.IsNullOrEmpty(Model.DataNotice))
+{
+    <partial name="_Notice" model="Model.DataNotice" view-data="@V.Notice(ViewData, "warn")" />
+}
+
+<partial name="_KpiCards" model="Model.Kpis" />
+
+<div class="section-head">
+    <div>
+        <h2>Distribusi Model Perangkat</h2>
+        <p>Komposisi merek dan model laptop/PC yang dipakai di seluruh departemen.</p>
+    </div>
+    <div class="right">
+        <span class="chip">@Model.Models.Count model terdeteksi</span>
+    </div>
+</div>
+
+<div class="grid g-2-1">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Model Perangkat</h3>
+                <div class="sub">Jumlah unit per model</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.ModelDistribution" view-data="@V.Chart(ViewData, "c-model", "bar", 250)" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Detail Model</h3>
+                <div class="sub">Pabrikan &amp; pangsa fleet</div>
+            </div>
+        </div>
+        <div class="scroll-y" style="max-height:262px">
+            @foreach (var m in Model.Models)
+            {
+                <div class="stat-row">
+                    <div style="min-width:0">
+                        <div class="name">@m.Name</div>
+                        <div class="meta">@m.Sub.Or("Pabrikan tidak diketahui")</div>
+                    </div>
+                    <div class="bar"><i style="width:@V.N1(m.Percent)%;background:var(--accent)"></i></div>
+                    <div class="val">@m.Count</div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="section-head">
+    <div>
+        <h2>Kapasitas RAM</h2>
+        <p>Variasi kapasitas terpasang, distribusi unit, serta tekanan pemakaian RAM rata-rata per departemen.</p>
+    </div>
+    <div class="right">
+        <span class="chip"><svg width="12" height="12"><use href="#i-ram"></use></svg> Total RAM fleet @V.Gb(Model.FleetRamTotalGb)</span>
+    </div>
+</div>
+
+<div class="grid g-3">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Variasi Kapasitas RAM</h3>
+                <div class="sub">Proporsi tiap kapasitas terhadap fleet</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.RamVarietyChart" view-data="@V.Chart(ViewData, "c-ram-variety", "donut", 226, "UNIT")" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Distribusi Kapasitas RAM</h3>
+                <div class="sub">Jumlah unit per kelas kapasitas</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.RamDistributionChart" view-data="@V.Chart(ViewData, "c-ram-dist", "bar", 226)" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Rata-rata RAM Terpakai</h3>
+                <div class="sub">@V.Pct(Model.AvgRamUsedPercent) ≈ @V.N1(Model.AvgRamUsedGb) GB dari @V.N1(Model.AvgRamTotalGb) GB rata-rata</div>
+            </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;margin:6px 0 14px">
+            <div style="font-size:34px;font-weight:740;letter-spacing:-1px;color:@V.ToneColor(Model.AvgRamUsedPercent, 70, 85)">@V.Pct(Model.AvgRamUsedPercent)</div>
+            <div style="flex:1">
+                <partial name="_Bar" model="Model.AvgRamUsedPercent" />
+                <div class="meta small muted" style="margin-top:6px;font-size:11.6px;color:var(--text-dim)">
+                    @Model.HighRamPressureDevices perangkat di atas 85% · @Model.LowRamDevices perangkat &lt; 8 GB
+                </div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.RamPressureChart" view-data="@V.Chart(ViewData, "c-ram-pressure", "bar", 150)" />
+    </div>
+</div>
+
+<div class="grid g-2" style="margin-top:14px">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Kelas Kapasitas RAM</h3>
+                <div class="sub">Catatan standar IT untuk tiap kelas</div>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="tbl compact">
+                <thead>
+                    <tr><th>Kapasitas</th><th class="num">Unit</th><th class="num">Porsi</th><th class="num">Total GB</th><th>Catatan</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var b in Model.RamBuckets)
+                    {
+                        <tr>
+                            <td><span class="badge @b.Tone">@b.Bucket</span></td>
+                            <td class="num">@b.Count</td>
+                            <td class="num">@V.Pct(b.Percent)</td>
+                            <td class="num">@V.N0(b.TotalGb)</td>
+                            <td class="muted small">@b.Note</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Kandidat Upgrade RAM</h3>
+                <div class="sub">RAM &lt; 8 GB atau pemakaian ≥ 90% pada laporan terakhir</div>
+            </div>
+        </div>
+        @if (Model.RamUpgradeCandidates.Count == 0)
+        {
+            <div class="chart-empty">Tidak ada perangkat yang perlu upgrade RAM.</div>
+        }
+        else
+        {
+            <div class="scroll-y" style="max-height:230px">
+                @foreach (var c in Model.RamUpgradeCandidates)
+                {
+                    <div class="stat-row">
+                        <svg width="15" height="15" style="color:var(--warn);flex:0 0 15px"><use href="#i-alert"></use></svg>
+                        <div class="name" style="font-family:var(--mono);font-size:12.2px">@c</div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<div class="section-head">
+    <div>
+        <h2>Sistem Operasi &amp; BIOS</h2>
+        <p>Fleet OS distribution, ringkasan versi Windows, dan sebaran versi BIOS untuk perencanaan patching.</p>
+    </div>
+    <div class="right">
+        @if (Model.UnsupportedWindowsCount > 0)
+        {
+            <span class="badge bad"><i></i>@Model.UnsupportedWindowsCount unit di Windows end-of-support</span>
+        }
+        else
+        {
+            <span class="badge good"><i></i>Semua Windows masih didukung</span>
+        }
+    </div>
+</div>
+
+<div class="grid g-3">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Fleet OS Distribution</h3>
+                <div class="sub">Sebaran sistem operasi seluruh perangkat</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.OsDistribution" view-data="@V.Chart(ViewData, "c-os", "donut", 236, "UNIT")" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Windows Version Summary</h3>
+                <div class="sub">Berdasarkan build number yang dilaporkan agent</div>
+            </div>
+        </div>
+        <div class="table-wrap scroll-y" style="max-height:250px">
+            <table class="tbl compact" data-sortable>
+                <thead>
+                    <tr><th data-sort>Versi</th><th class="num" data-sort>Unit</th><th data-sort>Status</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var w in Model.WindowsVersions)
+                    {
+                        <tr>
+                            <td>
+                                <div style="font-weight:640"><svg width="12" height="12" style="vertical-align:-2px;color:var(--info)"><use href="#i-windows"></use></svg> @w.Name</div>
+                                <div class="small muted">@w.Sub.Or()</div>
+                            </td>
+                            <td class="num">@w.Count</td>
+                            <td>
+                                @if (w.Tone == "good")
+                                {
+                                    <span class="badge good"><i></i>Didukung</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bad"><i></i>End of support</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>BIOS Versions</h3>
+                <div class="sub">Dominan: @Model.DominantBios · @Model.BiosVariantCount varian</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.BiosChart" view-data="@V.Chart(ViewData, "c-bios", "hbar", 236)" />
+    </div>
+</div>
+
+<div class="grid g-2" style="margin-top:14px">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Detail BIOS per Varian</h3>
+                <div class="sub">Vendor &amp; jumlah unit</div>
+            </div>
+        </div>
+        <div class="table-wrap scroll-y" style="max-height:250px">
+            <table class="tbl compact" data-sortable>
+                <thead><tr><th data-sort>BIOS Version</th><th data-sort>Vendor</th><th class="num" data-sort>Unit</th><th class="num" data-sort>Porsi</th></tr></thead>
+                <tbody>
+                    @foreach (var b in Model.BiosVersions)
+                    {
+                        <tr>
+                            <td style="font-family:var(--mono);font-size:11.8px">@b.Name</td>
+                            <td class="muted">@b.Sub.Or()</td>
+                            <td class="num">@b.Count</td>
+                            <td class="num">@V.Pct(b.Percent)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Prosesor Terpasang</h3>
+                <div class="sub">Model CPU terbanyak di fleet</div>
+            </div>
+        </div>
+        <partial name="_RankList" model="Model.CpuSummary" view-data='@(new ViewDataDictionary(ViewData) { { "suffix", " unit" }, { "showSub", false } })' />
+    </div>
+</div>
+
+<div class="section-head">
+    <div>
+        <h2>Inventaris Sistem Perangkat</h2>
+        <p>Spesifikasi lengkap tiap perangkat: model, CPU, RAM, OS, BIOS, dan status terakhir.</p>
+    </div>
+    <div class="right">
+        <input class="input" type="search" placeholder="Cari perangkat / model / OS…" data-table-filter="#tbl-hw" data-table-counter="#cnt-hw" />
+        <span class="chip" id="cnt-hw">@Model.Inventory.Count baris</span>
+    </div>
+</div>
+
+<div class="card tight">
+    <div class="table-wrap scroll-y" style="max-height:520px">
+        <table class="tbl compact" id="tbl-hw" data-sortable>
+            <thead>
+                <tr>
+                    <th data-sort>Hostname</th>
+                    <th data-sort>Tipe</th>
+                    <th data-sort>Asset Tag</th>
+                    <th data-sort>Manufacturer</th>
+                    <th data-sort>Model</th>
+                    <th data-sort>Serial</th>
+                    <th data-sort>CPU</th>
+                    <th class="num" data-sort>Cores</th>
+                    <th class="num" data-sort>RAM (GB)</th>
+                    <th style="min-width:120px" data-sort>RAM terpakai</th>
+                    <th data-sort>OS</th>
+                    <th data-sort>Build</th>
+                    <th data-sort>BIOS</th>
+                    <th data-sort>Departemen</th>
+                    <th data-sort>Lokasi</th>
+                    <th data-sort>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in Model.Inventory)
+                {
+                    <tr>
+                        <td class="host"><a asp-controller="Device" asp-action="Details" asp-route-id="@r.Hostname">@r.Hostname</a></td>
+                        <td class="muted">@r.DeviceType</td>
+                        <td class="muted" style="font-family:var(--mono);font-size:11.6px">@r.AssetTag.Or()</td>
+                        <td class="muted">@r.Manufacturer.Or()</td>
+                        <td class="muted">@r.Model.Or()</td>
+                        <td class="muted" style="font-family:var(--mono);font-size:11.6px">@r.SerialNumber.Or()</td>
+                        <td class="muted small" title="@r.CpuName.Or()">@Short(r.CpuName, 30)</td>
+                        <td class="num">@r.CpuCores</td>
+                        <td class="num" data-v="@V.N0(r.RamTotalGb)" style="color:@(r.RamTotalGb < 8 ? "var(--bad)" : "inherit")">@V.N0(r.RamTotalGb)</td>
+                        <td data-v="@V.N1(r.RamUsedPercent)"><partial name="_Bar" model="r.RamUsedPercent" /></td>
+                        <td class="muted small">@r.OsName.Or()</td>
+                        <td class="muted small">@r.OsBuild.Or()</td>
+                        <td class="muted small" style="font-family:var(--mono);font-size:11.4px">@r.BiosVersion.Or()</td>
+                        <td class="muted">@r.Department.Or()</td>
+                        <td class="muted small">@r.Location.Or()</td>
+                        <td><partial name="_Badge" model="r.Status" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

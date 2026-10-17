@@ -1,0 +1,272 @@
+@model SoftwareViewModel
+@using System.Globalization
+@using DeviceMonitor.Web.Services
+@{
+    ViewData["Title"] = "Software Inventory & Compliance";
+    var publishers = Model.Publishers.Select(p => p.Name).ToList();
+}
+
+@if (!string.IsNullOrEmpty(Model.DataNotice))
+{
+    <partial name="_Notice" model="Model.DataNotice" view-data="@V.Notice(ViewData, "warn")" />
+}
+
+<partial name="_KpiCards" model="Model.Kpis" />
+
+<div class="section-head">
+    <div>
+        <h2>Installed Software Inventory — Grouped by Version</h2>
+        <p>Setiap kombinasi nama software + versi beserta jumlah perangkat yang memakainya (coverage fleet).</p>
+    </div>
+    <div class="right">
+        <span class="chip">@Model.Grouped.Count kombinasi nama-versi</span>
+        <span class="chip">Coverage dihitung dari total perangkat terdaftar</span>
+    </div>
+</div>
+
+<div class="grid g-3">
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Top 15 Software Terbanyak</h3>
+                <div class="sub">Jumlah perangkat yang memasang</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.TopSoftwareChart" view-data="@V.Chart(ViewData, "c-topsw", "hbar", 330)" />
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Fragmentasi Versi</h3>
+                <div class="sub">Software dengan lebih dari satu versi beredar</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.VersionFragmentationChart" view-data="@V.Chart(ViewData, "c-frag", "bar", 190)" />
+        <div class="scroll-y" style="max-height:126px;margin-top:10px">
+            @foreach (var f in Model.MostFragmented)
+            {
+                <div class="stat-row">
+                    <div style="min-width:0">
+                        <div class="name">@f.Name</div>
+                        <div class="meta">@f.Sub</div>
+                    </div>
+                    <div class="val"><span class="badge @(f.Count >= 4 ? "bad" : f.Count >= 3 ? "warn" : "info")">@f.Count versi</span></div>
+                </div>
+            }
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <h3>Compliance</h3>
+                <div class="sub">@V.Pct(Model.CompliancePercent) instalasi sesuai kebijakan IT</div>
+            </div>
+        </div>
+        <partial name="_Chart" model="Model.ComplianceChart" view-data="@V.Chart(ViewData, "c-comp", "donut", 180, "ITEM")" />
+        <div class="card-head" style="margin-top:12px;margin-bottom:6px">
+            <h3 style="font-size:12.4px">Publisher terbanyak</h3>
+        </div>
+        <partial name="_Chart" model="Model.PublisherChart" view-data="@V.Chart(ViewData, "c-pub", "hbar", 150)" />
+    </div>
+</div>
+
+<div class="card tight" style="margin-top:14px">
+    <div class="card-head">
+        <div>
+            <h3>Software per Versi</h3>
+            <div class="sub">Nama software, versi, publisher, jumlah perangkat, dan status compliance</div>
+        </div>
+        <div class="right">
+            <input class="input" type="search" placeholder="Cari software / versi…" data-table-filter="#tbl-group" data-table-counter="#cnt-group" />
+            <span class="chip" id="cnt-group">@Model.Grouped.Count baris</span>
+        </div>
+    </div>
+    <div class="table-wrap scroll-y" style="max-height:460px">
+        <table class="tbl compact" id="tbl-group" data-sortable>
+            <thead>
+                <tr>
+                    <th data-sort>Nama Software</th>
+                    <th data-sort>Versi</th>
+                    <th data-sort>Publisher</th>
+                    <th class="num" data-sort>Perangkat</th>
+                    <th style="min-width:130px" data-sort>Coverage</th>
+                    <th class="num" data-sort>Ukuran total</th>
+                    <th data-sort>Compliance</th>
+                    <th data-sort>Terakhir terlihat</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var g in Model.Grouped)
+                {
+                    <tr>
+                        <td style="font-weight:620">@g.Name</td>
+                        <td style="font-family:var(--mono);font-size:11.8px">@g.Version</td>
+                        <td class="muted small">@g.Publisher.Or()</td>
+                        <td class="num" data-v="@g.DeviceCount">@g.DeviceCount</td>
+                        <td data-v="@V.N1(g.CoveragePercent)"><partial name="_Bar" model="g.CoveragePercent" view-data="@V.Tone(ViewData, "info")" /></td>
+                        <td class="num" data-v="@V.N1(g.TotalSizeMb)">@V.Mb(g.TotalSizeMb)</td>
+                        <td><partial name="_Badge" model="g.ComplianceStatus" /></td>
+                        <td class="muted small">@V.Ago(g.LastSeenUtc)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (Model.Issues.Count > 0)
+{
+    <div class="section-head">
+        <div>
+            <h2>Temuan Compliance</h2>
+            <p>@Model.Issues.Count temuan teratas: versi dilarang, versi di bawah standar, dan software wajib yang belum terpasang.</p>
+        </div>
+        <div class="right">
+            <a class="btn btn-sm" asp-controller="Data" asp-action="Index">Kelola aturan <svg><use href="#i-arrow"></use></svg></a>
+        </div>
+    </div>
+    <div class="card tight">
+        <div class="table-wrap scroll-y" style="max-height:330px">
+            <table class="tbl compact">
+                <thead><tr><th>Hostname</th><th>Software</th><th>Versi</th><th>Temuan</th><th>Rekomendasi</th></tr></thead>
+                <tbody>
+                    @foreach (var i in Model.Issues)
+                    {
+                        <tr>
+                            <td class="host"><a asp-controller="Device" asp-action="Details" asp-route-id="@i.Hostname">@i.Hostname</a></td>
+                            <td>@i.Software</td>
+                            <td style="font-family:var(--mono);font-size:11.8px">@i.Version</td>
+                            <td><span class="badge @(i.Tone)"><i></i>@i.Issue</span></td>
+                            <td class="muted small">@i.Recommendation</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<div class="section-head">
+    <div>
+        <h2>Installed Software Inventory — Detail</h2>
+        <p>Nama komputer, nama software, versi, publisher, tanggal instalasi, dan ukuran.</p>
+    </div>
+    <div class="right">
+        <form class="filters" method="get" asp-controller="Software" asp-action="Index">
+            <input class="input" type="search" name="q" value="@Model.Search" placeholder="Cari komputer / software / versi…" />
+            <select class="input" name="publisher">
+                <option value="">Semua publisher</option>
+                @foreach (var p in publishers)
+                {
+                    if (Model.PublisherFilter == p)
+                    {
+                        <option value="@p" selected>@p</option>
+                    }
+                    else
+                    {
+                        <option value="@p">@p</option>
+                    }
+                }
+            </select>
+            <select class="input" name="compliance">
+                <option value="">Semua status</option>
+                @foreach (var c in new[] { "Compliant", "Outdated", "Prohibited", "Unmanaged" })
+                {
+                    if (Model.ComplianceFilter == c)
+                    {
+                        <option value="@c" selected>@c</option>
+                    }
+                    else
+                    {
+                        <option value="@c">@c</option>
+                    }
+                }
+            </select>
+            <select class="input" name="sort">
+                @foreach (var s in new[] { ("name", "Urut: software"), ("host", "Urut: komputer"), ("version", "Urut: versi"), ("publisher", "Urut: publisher"), ("size", "Urut: ukuran"), ("compliance", "Urut: compliance") })
+                {
+                    if (Model.Sort == s.Item1)
+                    {
+                        <option value="@s.Item1" selected>@s.Item2</option>
+                    }
+                    else
+                    {
+                        <option value="@s.Item1">@s.Item2</option>
+                    }
+                }
+            </select>
+            <button class="btn btn-primary" type="submit"><svg><use href="#i-search"></use></svg> Filter</button>
+            @if (!string.IsNullOrEmpty(Model.Search) || !string.IsNullOrEmpty(Model.PublisherFilter) || !string.IsNullOrEmpty(Model.ComplianceFilter))
+            {
+                <a class="btn" asp-controller="Software" asp-action="Index">Reset</a>
+            }
+        </form>
+    </div>
+</div>
+
+<div class="card tight">
+    <div class="table-wrap">
+        <table class="tbl compact">
+            <thead>
+                <tr>
+                    <th>Nama Komputer</th>
+                    <th>Departemen</th>
+                    <th>Nama Software</th>
+                    <th>Versi</th>
+                    <th>Publisher</th>
+                    <th>Tanggal Instal</th>
+                    <th class="num">Ukuran</th>
+                    <th>Scope</th>
+                    <th>Compliance</th>
+                    <th>Terakhir Terlihat</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var d in Model.Details)
+                {
+                    <tr>
+                        <td class="host"><a asp-controller="Device" asp-action="Details" asp-route-id="@d.Hostname">@d.Hostname</a></td>
+                        <td class="muted">@d.Department.Or()</td>
+                        <td style="font-weight:600">@d.Name</td>
+                        <td style="font-family:var(--mono);font-size:11.8px">@d.Version</td>
+                        <td class="muted small">@d.Publisher.Or()</td>
+                        <td class="muted small">@V.D(d.InstallDate)</td>
+                        <td class="num" data-v="@V.N1(d.SizeMb)">@V.Mb(d.SizeMb)</td>
+                        <td class="muted small">@d.Scope.Or()</td>
+                        <td><partial name="_Badge" model="d.ComplianceStatus" /></td>
+                        <td class="muted small">@V.Ago(d.LastSeenUtc)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pager">
+        <span class="info">
+            Halaman @Model.Page dari @Model.TotalPages · @V.N0(Model.DetailTotalCount) baris software
+        </span>
+        @if (Model.Page > 1)
+        {
+            <a asp-controller="Software" asp-action="Index" asp-route-page="@(Model.Page - 1)" asp-route-q="@Model.Search"
+               asp-route-publisher="@Model.PublisherFilter" asp-route-compliance="@Model.ComplianceFilter" asp-route-sort="@Model.Sort" asp-route-size="@Model.PageSize">← Sebelumnya</a>
+        }
+        @for (var p = Math.Max(1, Model.Page - 3); p <= Math.Min(Model.TotalPages, Model.Page + 3); p++)
+        {
+            var pp = p;
+            if (pp == Model.Page)
+            {
+                <span class="pg on">@pp</span>
+            }
+            else
+            {
+                <a class="pg" asp-controller="Software" asp-action="Index" asp-route-page="@pp" asp-route-q="@Model.Search"
+                   asp-route-publisher="@Model.PublisherFilter" asp-route-compliance="@Model.ComplianceFilter" asp-route-sort="@Model.Sort" asp-route-size="@Model.PageSize">@pp</a>
+            }
+        }
+        @if (Model.Page < Model.TotalPages)
+        {
+            <a asp-controller="Software" asp-action="Index" asp-route-page="@(Model.Page + 1)" asp-route-q="@Model.Search"
+               asp-route-publisher="@Model.PublisherFilter" asp-route-compliance="@Model.ComplianceFilter" asp-route-sort="@Model.Sort" asp-route-size="@Model.PageSize">Berikutnya →</a>
+        }
+    </div>
+</div>
